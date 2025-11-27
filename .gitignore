@@ -1,0 +1,8 @@
+.DS_Store
+.venv/
+venv/
+ENV/
+env/
+artifacts/
+models/exported/
+*.pth

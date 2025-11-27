@@ -1,0 +1,49 @@
+datasets:
+  fer2013:
+    type: imagefolder
+    root: data/fer2013
+    splits:
+      train: train
+      val: test
+      test: test
+    classes:
+      - angry
+      - disgust
+      - fear
+      - happy
+      - sad
+      - surprise
+      - neutral
+    input_size: [224, 224]
+    normalization:
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+    force_grayscale: true
+
+  facedata:
+    type: yolo_faces
+    root: facedata
+    splits:
+      train: train
+      val: valid
+      test: test
+    classes:
+      - angry
+      - contempt
+      - disgust
+      - fear
+      - happy
+      - natural
+      - sad
+      - sleepy
+      - surprised
+    input_size: [224, 224]
+    normalization:
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+    force_grayscale: false
+    yolo:
+      image_dir: images
+      label_dir: labels
+      bbox_expand: 0.12
+      min_pixels: 32
