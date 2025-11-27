@@ -6,3 +6,5 @@ env/
 artifacts/
 models/exported/
 *.pth
+data/
+facedata/
