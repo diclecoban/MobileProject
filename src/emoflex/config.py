@@ -21,6 +21,15 @@ class YOLOSettings:
 
 
 @dataclass(frozen=True)
+class AutoSplitConfig:
+    """Configuration for automatically splitting class folders."""
+
+    ratios: Dict[str, float]
+    seed: int = 42
+    stratified: bool = True
+
+
+@dataclass(frozen=True)
 class DatasetConfig:
     """Normalized representation of a dataset entry."""
 
@@ -34,6 +43,7 @@ class DatasetConfig:
     normalization_std: Tuple[float, float, float]
     force_grayscale: bool = False
     yolo: Optional[YOLOSettings] = None
+    auto_split: Optional[AutoSplitConfig] = None
 
     def split_dir(self, split: str) -> Path:
         if split not in self.splits:
@@ -63,6 +73,13 @@ class DatasetConfig:
                 "bbox_expand": self.yolo.bbox_expand,
                 "min_pixels": self.yolo.min_pixels,
             },
+            "auto_split": None
+            if self.auto_split is None
+            else {
+                "ratios": self.auto_split.ratios,
+                "seed": self.auto_split.seed,
+                "stratified": self.auto_split.stratified,
+            },
         }
 
 
@@ -80,6 +97,19 @@ def _make_dataset_config(name: str, payload: Dict) -> DatasetConfig:
             min_pixels=int(yolo_cfg.get("min_pixels", 1)),
         )
 
+    auto_split_cfg = payload.get("auto_split")
+    auto_split = None
+    if auto_split_cfg:
+        ratios_cfg = auto_split_cfg.get("ratios", {})
+        if not ratios_cfg:
+            raise ValueError(f"auto_split.ratios must be provided for dataset '{name}'")
+        ratios = {split: float(value) for split, value in ratios_cfg.items()}
+        auto_split = AutoSplitConfig(
+            ratios=ratios,
+            seed=int(auto_split_cfg.get("seed", 42)),
+            stratified=bool(auto_split_cfg.get("stratified", True)),
+        )
+
     return DatasetConfig(
         name=name,
         dataset_type=payload["type"],
@@ -91,6 +121,7 @@ def _make_dataset_config(name: str, payload: Dict) -> DatasetConfig:
         normalization_std=std,
         force_grayscale=bool(payload.get("force_grayscale", False)),
         yolo=yolo,
+        auto_split=auto_split,
     )
 
 
