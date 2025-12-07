@@ -20,12 +20,12 @@ SRC_DIR = os.path.join(PROJECT_ROOT, "src")
 if os.path.isdir(SRC_DIR) and SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
-DEFAULT_LABELS = ["angry", "disgust", "fear", "happy", "sad", "surprise", "neutral"]
+DEFAULT_LABELS = ["Angry", "Fear", "Happy", "Sad", "Surprise"]
 
 try:
     from emoflex.config import load_dataset_catalog, resolve_dataset
 
-    DATASET_NAME = os.environ.get("EMOFLEX_DATASET", "facedata")
+    DATASET_NAME = os.environ.get("EMOFLEX_DATASET", "data_faces")
     _catalog = load_dataset_catalog()
     _dataset_cfg = resolve_dataset(DATASET_NAME, _catalog)
     EMO_LABELS = _dataset_cfg.classes

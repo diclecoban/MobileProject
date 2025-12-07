@@ -51,7 +51,7 @@ def main():
         input_size=dataset_cfg.input_size,
         opset=args.opset,
     )
-    print(f"✅ Exported to {output_path}")
+    print(f"Exported to {output_path}")
 
 
 if __name__ == "__main__":

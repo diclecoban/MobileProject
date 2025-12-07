@@ -50,7 +50,7 @@ datasets:
 
   data_faces:
     type: imagefolder
-    root: Data
+    root: ./Data
     splits: {}
     classes:
       - Angry

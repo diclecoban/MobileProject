@@ -99,6 +99,7 @@ def main():
         pretrained=not args.no_pretrained,
         head_only=args.freeze_backbone,
     )
+    model = model.to(device)
     optimizer = optim.AdamW(
         trainable_parameters(model),
         lr=args.learning_rate,
@@ -139,6 +140,7 @@ def main():
         print("Evaluating best checkpoint on test split...")
         state = torch.load(summary.best_checkpoint, map_location=device)
         model.load_state_dict(state)
+        model = model.to(device)
         test_result = evaluate_model(model, loaders["test"], device, dataset_cfg.classes)
         print(f"Test accuracy: {test_result.accuracy*100:.2f}%")
         print("Macro F1: {:.2f}%".format(test_result.macro_f1 * 100))
