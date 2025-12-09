@@ -1,0 +1,193 @@
+{
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.924031,
+      "train_acc": 0.628313,
+      "val_loss": 0.812031,
+      "val_acc": 0.67445,
+      "lr": 0.0003,
+      "epoch_seconds": 172.43
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.717784,
+      "train_acc": 0.717422,
+      "val_loss": 0.689828,
+      "val_acc": 0.729695,
+      "lr": 0.0003,
+      "epoch_seconds": 150.7
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.629069,
+      "train_acc": 0.754542,
+      "val_loss": 0.62628,
+      "val_acc": 0.759645,
+      "lr": 0.0003,
+      "epoch_seconds": 88.9
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.557745,
+      "train_acc": 0.784682,
+      "val_loss": 0.61758,
+      "val_acc": 0.758376,
+      "lr": 0.0003,
+      "epoch_seconds": 90.93
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.48885,
+      "train_acc": 0.813363,
+      "val_loss": 0.604376,
+      "val_acc": 0.772166,
+      "lr": 0.0003,
+      "epoch_seconds": 88.75
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.422532,
+      "train_acc": 0.839421,
+      "val_loss": 0.571131,
+      "val_acc": 0.793401,
+      "lr": 0.0003,
+      "epoch_seconds": 88.11
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.370811,
+      "train_acc": 0.861482,
+      "val_loss": 0.494902,
+      "val_acc": 0.821658,
+      "lr": 0.0003,
+      "epoch_seconds": 88.35
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.316248,
+      "train_acc": 0.882104,
+      "val_loss": 0.473974,
+      "val_acc": 0.839002,
+      "lr": 0.0003,
+      "epoch_seconds": 88.28
+    },
+    {
+      "epoch": 9,
+      "train_loss": 0.28466,
+      "train_acc": 0.894245,
+      "val_loss": 0.447781,
+      "val_acc": 0.845939,
+      "lr": 0.0003,
+      "epoch_seconds": 90.03
+    },
+    {
+      "epoch": 10,
+      "train_loss": 0.251143,
+      "train_acc": 0.907126,
+      "val_loss": 0.424719,
+      "val_acc": 0.86066,
+      "lr": 0.0003,
+      "epoch_seconds": 89.87
+    },
+    {
+      "epoch": 11,
+      "train_loss": 0.221684,
+      "train_acc": 0.920409,
+      "val_loss": 0.416825,
+      "val_acc": 0.865144,
+      "lr": 0.0003,
+      "epoch_seconds": 89.92
+    },
+    {
+      "epoch": 12,
+      "train_loss": 0.200611,
+      "train_acc": 0.928044,
+      "val_loss": 0.431775,
+      "val_acc": 0.862352,
+      "lr": 0.0003,
+      "epoch_seconds": 88.29
+    },
+    {
+      "epoch": 13,
+      "train_loss": 0.18474,
+      "train_acc": 0.93367,
+      "val_loss": 0.405227,
+      "val_acc": 0.874365,
+      "lr": 0.0003,
+      "epoch_seconds": 88.57
+    },
+    {
+      "epoch": 14,
+      "train_loss": 0.168296,
+      "train_acc": 0.940544,
+      "val_loss": 0.37946,
+      "val_acc": 0.89247,
+      "lr": 0.0003,
+      "epoch_seconds": 90.52
+    },
+    {
+      "epoch": 15,
+      "train_loss": 0.159416,
+      "train_acc": 0.942511,
+      "val_loss": 0.364945,
+      "val_acc": 0.897124,
+      "lr": 0.0003,
+      "epoch_seconds": 88.13
+    },
+    {
+      "epoch": 16,
+      "train_loss": 0.145641,
+      "train_acc": 0.949259,
+      "val_loss": 0.381506,
+      "val_acc": 0.896785,
+      "lr": 0.0003,
+      "epoch_seconds": 89.12
+    },
+    {
+      "epoch": 17,
+      "train_loss": 0.1392,
+      "train_acc": 0.95112,
+      "val_loss": 0.396757,
+      "val_acc": 0.89357,
+      "lr": 0.0003,
+      "epoch_seconds": 87.54
+    },
+    {
+      "epoch": 18,
+      "train_loss": 0.132135,
+      "train_acc": 0.952368,
+      "val_loss": 0.369067,
+      "val_acc": 0.8989,
+      "lr": 0.0003,
+      "epoch_seconds": 89.33
+    },
+    {
+      "epoch": 19,
+      "train_loss": 0.127378,
+      "train_acc": 0.953912,
+      "val_loss": 0.362729,
+      "val_acc": 0.905499,
+      "lr": 0.0003,
+      "epoch_seconds": 89.3
+    },
+    {
+      "epoch": 20,
+      "train_loss": 0.120846,
+      "train_acc": 0.957592,
+      "val_loss": 0.351329,
+      "val_acc": 0.907276,
+      "lr": 0.0003,
+      "epoch_seconds": 99.1
+    }
+  ],
+  "class_names": [
+    "Angry",
+    "Fear",
+    "Happy",
+    "Sad",
+    "Suprise"
+  ],
+  "best_val_acc": 0.9072758037225043,
+  "epochs_trained": 20
+}

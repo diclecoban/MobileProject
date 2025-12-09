@@ -3,5 +3,4 @@
 venv/
 ENV/
 env/
-artifacts/
 *.pth
