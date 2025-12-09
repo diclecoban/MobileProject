@@ -9,6 +9,7 @@ import torch
 from torch import nn
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
+from torch.cuda.amp import GradScaler, autocast
 
 
 @dataclass
@@ -29,6 +30,7 @@ class Trainer:
         device: torch.device,
         scheduler=None,
         grad_clip: Optional[float] = None,
+        use_amp: bool = False,
     ):
         self.model = model
         self.optimizer = optimizer
@@ -36,6 +38,8 @@ class Trainer:
         self.device = device
         self.scheduler = scheduler
         self.grad_clip = grad_clip
+        self.use_amp = bool(use_amp)
+        self.scaler = GradScaler(enabled=self.use_amp)
         self.model.to(self.device)
 
     def _run_epoch(self, loader: DataLoader, train: bool = True) -> Dict[str, float]:
@@ -54,15 +58,28 @@ class Trainer:
                 images = images.to(self.device, non_blocking=True)
                 labels = labels.to(self.device, non_blocking=True)
 
-                outputs = self.model(images)
-                loss = self.criterion(outputs, labels)
+                with autocast(enabled=self.use_amp):
+                    outputs = self.model(images)
+                    loss = self.criterion(outputs, labels)
 
                 if train:
                     self.optimizer.zero_grad(set_to_none=True)
-                    loss.backward()
-                    if self.grad_clip:
-                        nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
-                    self.optimizer.step()
+                    if self.use_amp:
+                        self.scaler.scale(loss).backward()
+                        if self.grad_clip:
+                            self.scaler.unscale_(self.optimizer)
+                            nn.utils.clip_grad_norm_(
+                                self.model.parameters(), self.grad_clip
+                            )
+                        self.scaler.step(self.optimizer)
+                        self.scaler.update()
+                    else:
+                        loss.backward()
+                        if self.grad_clip:
+                            nn.utils.clip_grad_norm_(
+                                self.model.parameters(), self.grad_clip
+                            )
+                        self.optimizer.step()
 
                 running_loss += loss.item() * labels.size(0)
                 preds = outputs.argmax(dim=1)

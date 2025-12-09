@@ -8,9 +8,8 @@ DATASET="${1:-facedata}"
 MODEL="${2:-mobilenet_v3_small}"
 ARTIFACT_DIR="${ROOT_DIR}/artifacts/${DATASET}"
 
-echo ">>> Training ${MODEL} on ${DATASET}"
-python3 "${ROOT_DIR}/scripts/train.py" \
-  --dataset "${DATASET}" \
+echo ">>> Training ${MODEL} on GPU using Data/train vs Data/test"
+python3 "${ROOT_DIR}/scripts/train_gpu.py" \
   --model "${MODEL}" \
   --output-dir "${ARTIFACT_DIR}"
 

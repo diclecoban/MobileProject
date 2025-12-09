@@ -23,38 +23,39 @@ Update this file to register new datasets or tweak transforms (input size, norma
 
 ## Training
 
-`scripts/train.py` is now the configurable entry point.
+Use `scripts/train_gpu.py` to fine-tune a classifier directly from the `Data/train` and `Data/test` folders.  
+Each class must live in its own sub-folder (PyTorch `ImageFolder` layout). A CUDA-capable GPU is required.
 
 ```bash
-# Train on facedata with default settings
-python scripts/train.py \
-  --dataset facedata \
-  --model mobilenet_v3_small \
-  --epochs 25 \
-  --output-dir artifacts
+# Default MobileNetV3-Small run
+python scripts/train_gpu.py \
+  --epochs 30 \
+  --batch-size 96 \
+  --output-dir artifacts/default_run
 
-# Fine-tune FER2013 with ResNet18 head-only training
-python scripts/train.py \
-  --dataset fer2013 \
-  --model resnet18 \
+# ResNet34 with a larger input size and frozen backbone
+python scripts/train_gpu.py \
+  --model resnet34 \
+  --img-size 256 \
   --freeze-backbone \
-  --batch-size 128
+  --output-dir artifacts/resnet34_freeze
 ```
 
 Key arguments:
 
-- `--dataset`: name from `configs/datasets.yaml`
-- `--model`: `mobilenet_v3_small`, `resnet18`, `efficientnet_b0`
-- `--freeze-backbone`: lock backbone, train only classifier
-- `--output-dir`: directory for checkpoints/history (default `artifacts`)
+- `--train-dir` / `--val-dir` / `--test-dir`: point to the prepared folders (defaults to `Data/train` and `Data/test`).
+- `--model`: `mobilenet_v3_small`, `mobilenet_v3_large`, `resnet18`, `resnet34`, `efficientnet_b0`.
+- `--epochs`, `--batch-size`, `--learning-rate`, `--weight-decay`.
+- `--no-pretrained` or `--freeze-backbone` for transfer-learning tweaks.
+- `--amp/--no-amp`, `--grad-clip`, `--patience` for GPU/memory control.
 
-The trainer saves:
+Outputs saved under `--output-dir`:
 
-- `emotion_model_best.pth` (highest validation accuracy)
-- `emotion_model.pth` (latest epoch)
-- `training_history.json` (per-epoch metrics)
+- `emotion_model_best.pth` – checkpoint with the best validation accuracy.
+- `emotion_model.pth` – latest epoch weights.
+- `training_history.json` – per-epoch metrics + class list.
 
-If a test split exists in the catalog, the script automatically evaluates the best checkpoint and prints detailed metrics.
+After training, the script automatically reloads the best checkpoint and reports accuracy on the provided test folder.
 
 ## Evaluation
 
@@ -78,15 +79,17 @@ python scripts/export_onnx.py \
 
 ## Real-time demo
 
-`emotion_rt.py` now reads labels from the dataset catalog so overlays stay in sync with the trained checkpoint.  
-Customize via environment variables:
+`emotion_rt.py` mirrors the preprocessing from the dataset catalog (or `training_history.json`) so the webcam overlay stays consistent with the trained checkpoint. Run it by pointing to your exported ONNX file:
 
 ```bash
 export PYTHONPATH=src:$PYTHONPATH
-export EMOFLEX_DATASET=facedata
-export EMOFLEX_ONNX=models/emotion.onnx
-python emotion_rt.py
+python emotion_rt.py \
+  --onnx models/exported/data_faces_mobilenet_v3_small.onnx \
+  --dataset data_faces \
+  --history artifacts/gpu_training/training_history.json
 ```
+
+Environment variables such as `EMOFLEX_ONNX`, `EMOFLEX_DATASET`, `EMOFLEX_HISTORY`, `EMOFLEX_YUNET`, or camera overrides still work, but every option is also exposed via CLI flags (`python emotion_rt.py --help`).
 
 ## Automated pipeline
 
@@ -103,7 +106,7 @@ Arguments default to `facedata` and `mobilenet_v3_small`.
 ```
 configs/            # dataset catalog
 src/emoflex/        # reusable library (config, data, models, trainer, eval, export)
-scripts/train.py    # trainer CLI
+scripts/train_gpu.py # GPU training CLI (ImageFolder)
 scripts/eval.py     # evaluator
 scripts/export_onnx.py  # exporter
 emotion_rt.py               # realtime demo (YuNet + ONNX classifier)

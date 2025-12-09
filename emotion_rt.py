@@ -8,39 +8,202 @@ Real-time Facial Emotion Recognition (Laptop webcam)
 - Overlay: clear text with background + stacked bars + big dominant label
 """
 
+import argparse
+import json
 import os
 import sys
 import time
 from collections import deque
-import numpy as np
-import cv2 as cv
+from pathlib import Path
+from typing import List, Sequence, Tuple
 
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-SRC_DIR = os.path.join(PROJECT_ROOT, "src")
-if os.path.isdir(SRC_DIR) and SRC_DIR not in sys.path:
-    sys.path.insert(0, SRC_DIR)
+import cv2 as cv
+import numpy as np
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+SRC_DIR = PROJECT_ROOT / "src"
+if SRC_DIR.is_dir() and str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 DEFAULT_LABELS = ["Angry", "Fear", "Happy", "Sad", "Surprise"]
+EMO_LABELS: List[str] = DEFAULT_LABELS.copy()
+DEFAULT_HISTORY_PATH = PROJECT_ROOT / "artifacts" / "gpu_training" / "training_history.json"
+DEFAULT_EXPORTED_DIR = PROJECT_ROOT / "models" / "exported"
+DEFAULT_YUNET = PROJECT_ROOT / "models" / "face_detection_yunet.onnx"
 
 try:
     from emoflex.config import load_dataset_catalog, resolve_dataset
+except Exception as exc:  # pragma: no cover - optional dependency
+    LOAD_CONFIG_ERROR = exc
+    load_dataset_catalog = None  # type: ignore
+    resolve_dataset = None  # type: ignore
+else:
+    LOAD_CONFIG_ERROR = None
 
-    DATASET_NAME = os.environ.get("EMOFLEX_DATASET", "data_faces")
-    _catalog = load_dataset_catalog()
-    _dataset_cfg = resolve_dataset(DATASET_NAME, _catalog)
-    EMO_LABELS = _dataset_cfg.classes
-    print(f"[INFO] Loaded labels for dataset '{DATASET_NAME}': {EMO_LABELS}")
-except Exception as exc:  # pylint: disable=broad-except
-    print(f"[WARN] Falling back to default labels ({exc}). Ensure PYTHONPATH includes 'src'.")
-    EMO_LABELS = DEFAULT_LABELS
 
-# -------------------- Paths & Config --------------------
-YUNET_PATH   = os.environ.get("EMOFLEX_YUNET", "models/face_detection_yunet.onnx")
-EMOTION_ONNX = os.environ.get("EMOFLEX_ONNX", "models/emotion.onnx")
-USE_EMOTION  = os.path.exists(EMOTION_ONNX)
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Real-time facial emotion recognition using YuNet + ONNX Runtime.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--onnx",
+        default=os.environ.get("EMOFLEX_ONNX"),
+        help="Path to the exported emotion classifier ONNX file. "
+        "If omitted, defaults to models/exported/<dataset>_<model>.onnx.",
+    )
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("EMOFLEX_MODEL", "mobilenet_v3_small"),
+        help="Model name (used only to infer the default ONNX path).",
+    )
+    parser.add_argument(
+        "--dataset",
+        default=os.environ.get("EMOFLEX_DATASET", "data_faces"),
+        help="Dataset key from configs/datasets.yaml.",
+    )
+    parser.add_argument(
+        "--history",
+        default=os.environ.get("EMOFLEX_HISTORY", str(DEFAULT_HISTORY_PATH)),
+        help="Path to training_history.json to recover class names (optional).",
+    )
+    parser.add_argument(
+        "--labels",
+        help="Comma-separated list of labels to override dataset/history labels.",
+    )
+    parser.add_argument(
+        "--detector",
+        default=os.environ.get("EMOFLEX_YUNET", str(DEFAULT_YUNET)),
+        help="Path to YuNet ONNX face detector.",
+    )
+    parser.add_argument("--camera", type=int, default=int(os.environ.get("EMOFLEX_CAM_INDEX", "0")))
+    parser.add_argument("--width", type=int, default=int(os.environ.get("EMOFLEX_CAM_WIDTH", "1280")))
+    parser.add_argument("--height", type=int, default=int(os.environ.get("EMOFLEX_CAM_HEIGHT", "720")))
+    parser.add_argument(
+        "--classify-every",
+        type=int,
+        default=2,
+        help="Run the emotion classifier every N frames (higher = faster, more latency).",
+    )
+    parser.add_argument(
+        "--min-face",
+        type=int,
+        default=100,
+        help="Ignore detections smaller than this many pixels.",
+    )
+    parser.add_argument(
+        "--input-size",
+        type=int,
+        default=None,
+        help="Override square input size for the classifier (defaults to dataset/input metadata).",
+    )
+    parser.add_argument(
+        "--force-grayscale",
+        dest="force_grayscale",
+        action="store_true",
+        help="Force grayscale preprocessing regardless of dataset config.",
+    )
+    parser.add_argument(
+        "--color",
+        dest="force_grayscale",
+        action="store_false",
+        help="Disable grayscale even if the dataset config requests it.",
+    )
+    parser.add_argument(
+        "--det-only",
+        action="store_true",
+        help="Skip loading the emotion classifier (face detection only).",
+    )
+    parser.set_defaults(force_grayscale=None)
+    return parser.parse_args()
 
-CAM_INDEX = 0
-CAM_W, CAM_H = 1280, 720
+
+def try_load_dataset_config(dataset_name: str | None):
+    if not dataset_name or load_dataset_catalog is None or resolve_dataset is None:
+        if LOAD_CONFIG_ERROR:
+            print(
+                f"[WARN] Dataset catalog unavailable ({LOAD_CONFIG_ERROR}). "
+                "Ensure PYTHONPATH includes 'src'.",
+            )
+        return None
+    try:
+        catalog = load_dataset_catalog()
+        return resolve_dataset(dataset_name, catalog)
+    except Exception as exc:  # pragma: no cover - runtime path
+        print(f"[WARN] Failed to load dataset config '{dataset_name}': {exc}")
+        return None
+
+
+def parse_label_override(raw: str | None) -> List[str] | None:
+    if not raw:
+        return None
+    labels = [chunk.strip() for chunk in raw.split(",") if chunk.strip()]
+    return labels or None
+
+
+def labels_from_history(history_path: Path) -> List[str] | None:
+    if not history_path.exists():
+        return None
+    try:
+        data = json.loads(history_path.read_text(encoding="utf-8"))
+    except Exception as exc:  # pragma: no cover - simple IO
+        print(f"[WARN] Failed to read history file '{history_path}': {exc}")
+        return None
+    labels = data.get("class_names")
+    if isinstance(labels, list) and labels:
+        return [str(lbl) for lbl in labels]
+    return None
+
+
+def resolve_labels(args: argparse.Namespace, dataset_cfg) -> List[str]:
+    override = parse_label_override(args.labels)
+    if override:
+        print(f"[INFO] Using labels from --labels override: {override}")
+        return override
+
+    history_labels = labels_from_history(Path(args.history))
+    if history_labels:
+        print(f"[INFO] Loaded labels from history file: {history_labels}")
+        return history_labels
+
+    if dataset_cfg and dataset_cfg.classes:
+        print(f"[INFO] Loaded labels from dataset '{dataset_cfg.name}'.")
+        return list(dataset_cfg.classes)
+
+    print("[WARN] Falling back to default label list.")
+    return DEFAULT_LABELS.copy()
+
+
+def resolve_preprocess_config(args: argparse.Namespace, dataset_cfg):
+    if args.input_size:
+        size = (args.input_size, args.input_size)
+    elif dataset_cfg:
+        size = tuple(int(v) for v in dataset_cfg.input_size)
+    else:
+        size = (224, 224)
+
+    if dataset_cfg:
+        mean = np.array(dataset_cfg.normalization_mean, dtype=np.float32)
+        std = np.array(dataset_cfg.normalization_std, dtype=np.float32)
+    else:
+        mean = IMNET_MEAN.copy()
+        std = IMNET_STD.copy()
+
+    if args.force_grayscale is not None:
+        force_gray = args.force_grayscale
+    elif dataset_cfg:
+        force_gray = dataset_cfg.force_grayscale
+    else:
+        force_gray = False
+
+    return size, mean, std, force_gray
+
+
+def resolve_onnx_path(args: argparse.Namespace) -> Path:
+    if args.onnx:
+        return Path(args.onnx)
+    candidate = DEFAULT_EXPORTED_DIR / f"{args.dataset}_{args.model}.onnx"
+    return candidate
 
 SCORE_THR = 0.6
 NMS_THR   = 0.3
@@ -62,7 +225,7 @@ EMO_COLOR = {
 IMNET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMNET_STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
-# run classifier every Nth frame (stability + speed)
+# run classifier every Nth frame (values overwritten via CLI)
 CLASSIFY_EVERY = 2
 MIN_FACE = 100   # px
 
@@ -145,18 +308,35 @@ class EmotionStabilizer:
 
 # -------------------- Emotion model --------------------
 class EmotionONNX:
-    def __init__(self, onnx_path):
+    def __init__(
+        self,
+        onnx_path: Path,
+        input_size: Tuple[int, int],
+        mean: Sequence[float],
+        std: Sequence[float],
+        force_grayscale: bool,
+    ):
         import onnxruntime as ort
-        self.ort_sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
+
+        self.ort_sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
         self.iname = self.ort_sess.get_inputs()[0].name
         self.oname = self.ort_sess.get_outputs()[0].name
         self.apply_softmax = True  # set False if your ONNX already outputs probs
+        self.size = tuple(int(v) for v in input_size)
+        self.mean = np.asarray(mean, dtype=np.float32).reshape(3, 1, 1)
+        self.std = np.asarray(std, dtype=np.float32).reshape(3, 1, 1)
+        self.force_grayscale = bool(force_grayscale)
 
-    def preprocess(self, bgr_roi):
-        img = cv.resize(bgr_roi, (224, 224), interpolation=cv.INTER_AREA)
-        img = cv.cvtColor(img, cv.COLOR_BGR2RGB).astype(np.float32) / 255.0
-        img = (img - IMNET_MEAN) / IMNET_STD
-        img = np.transpose(img, (2,0,1))
+    def preprocess(self, bgr_roi: np.ndarray):
+        img = cv.resize(bgr_roi, self.size, interpolation=cv.INTER_AREA)
+        if self.force_grayscale:
+            img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+            img = cv.cvtColor(img, cv.COLOR_GRAY2RGB)
+        else:
+            img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+        img = img.astype(np.float32) / 255.0
+        img = np.transpose(img, (2, 0, 1))
+        img = (img - self.mean) / self.std
         return np.expand_dims(img, 0)
 
     def __call__(self, bgr_roi):
@@ -167,25 +347,45 @@ class EmotionONNX:
 
 # -------------------- Main --------------------
 def main():
-    # Detector
-    if not os.path.exists(YUNET_PATH):
-        raise FileNotFoundError(f"YuNet model not found at {YUNET_PATH}")
+    args = parse_args()
+    dataset_cfg = try_load_dataset_config(args.dataset)
+    size, mean, std, force_gray = resolve_preprocess_config(args, dataset_cfg)
+    labels = resolve_labels(args, dataset_cfg)
+
+    global EMO_LABELS, CLASSIFY_EVERY, MIN_FACE
+    EMO_LABELS = labels
+    CLASSIFY_EVERY = max(1, args.classify_every)
+    MIN_FACE = max(1, args.min_face)
+
+    yunet_path = Path(args.detector)
+    if not yunet_path.exists():
+        raise FileNotFoundError(f"YuNet model not found at {yunet_path}")
     det = cv.FaceDetectorYN_create(
-        YUNET_PATH, "", (320, 320), SCORE_THR, NMS_THR, TOPK,
+        str(yunet_path),
+        "",
+        (320, 320),
+        SCORE_THR,
+        NMS_THR,
+        TOPK,
         backend_id=cv.dnn.DNN_BACKEND_OPENCV,
-        target_id=cv.dnn.DNN_TARGET_CPU
+        target_id=cv.dnn.DNN_TARGET_CPU,
     )
 
-    # Emotion model
-    emo = EmotionONNX(EMOTION_ONNX) if USE_EMOTION else None
-    if emo is None:
-        print("[Info] Emotion model not found. Running detection-only demo.")
+    emo = None
+    if args.det_only:
+        print("[INFO] Detection-only mode enabled (skipping emotion classifier).")
+    else:
+        onnx_path = resolve_onnx_path(args)
+        if not onnx_path.exists():
+            raise FileNotFoundError(f"Emotion ONNX not found at {onnx_path}")
+        emo = EmotionONNX(onnx_path, size, mean, std, force_gray)
+        print(f"[INFO] Loaded emotion model from {onnx_path}")
 
-    cap = cv.VideoCapture(CAM_INDEX)
+    cap = cv.VideoCapture(args.camera)
     if not cap.isOpened():
         raise SystemExit("Camera not available. Check permissions.")
-    cap.set(cv.CAP_PROP_FRAME_WIDTH, CAM_W)
-    cap.set(cv.CAP_PROP_FRAME_HEIGHT, CAM_H)
+    cap.set(cv.CAP_PROP_FRAME_WIDTH, args.width)
+    cap.set(cv.CAP_PROP_FRAME_HEIGHT, args.height)
 
     # per-face stabilizer (idx used as pseudo id)
     stab = {}
@@ -249,9 +449,10 @@ def main():
                     
                     if top_idx is None:
                         top_idx = int(np.argmax(smoothed))
-                        dom_lab = EMO_LABELS[top_idx]
-                        dom_val = float(smoothed[top_idx])
-                        dom_col = EMO_COLOR.get(dom_lab, (0,255,255))
+                    top_idx = max(0, min(top_idx, len(EMO_LABELS) - 1))
+                    dom_lab = EMO_LABELS[top_idx]
+                    dom_val = float(smoothed[top_idx])
+                    dom_col = EMO_COLOR.get(dom_lab, (0,255,255))
 
                     BAR_W   = max(180, int(ww * 0.65))   
                     BAR_H   = 22                         

@@ -52,7 +52,7 @@ std=[0.229, 0.224, 0.225]
 
 ### Step 1: Train with Improved Script
 ```bash
-python3 scripts/train.py
+python3 scripts/train_gpu.py
 ```
 
 This will:
@@ -83,7 +83,7 @@ If you still want higher accuracy, try these:
 
 ### 1. Use a Larger Model
 ```python
-# In scripts/train.py, replace MobileNet with ResNet
+# In scripts/train_gpu.py, replace MobileNet with ResNet
 from torchvision.models import resnet18, ResNet18_Weights
 weights = ResNet18_Weights.IMAGENET1K_V1
 model = models.resnet18(weights=weights)
